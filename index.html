@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>CyberSnake · киберпанк змейка</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        body {
+            background: #0a0a12;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Courier New', monospace;
+            touch-action: pan-y;
+        }
+        .game-wrapper {
+            background: #11131f;
+            padding: 18px 18px 12px 18px;
+            border-radius: 48px 48px 32px 32px;
+            box-shadow: 0 0 40px rgba(0, 255, 255, 0.15), inset 0 1px 0 rgba(0, 255, 255, 0.2);
+            max-width: 540px;
+            width: 100%;
+            margin: 12px;
+            border: 1px solid #00ffff33;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            aspect-ratio: 400 / 400;
+            background: #0d0e1a;
+            border-radius: 32px;
+            box-shadow: inset 0 0 30px rgba(0, 255, 255, 0.05), 0 0 30px rgba(0, 255, 255, 0.1);
+            image-rendering: crisp-edges;
+            image-rendering: pixelated;
+            touch-action: none;
+            border: 1px solid #00ffff22;
+        }
+        .mobile-controls {
+            display: none;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 6px 4px 6px;
+            gap: 10px;
+        }
+        .ctrl-group {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        .ctrl-btn {
+            background: #1a1e30;
+            border: none;
+            border-radius: 60px;
+            color: #00f0ff;
+            font-size: 28px;
+            font-weight: bold;
+            width: 68px;
+            height: 68px;
+            box-shadow: 0 6px 0 #0a0c16, 0 8px 20px rgba(0, 0, 0, 0.8), inset 0 -2px 0 #00ffff33;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            touch-action: manipulation;
+            cursor: pointer;
+            transition: all 0.05s ease;
+            background: linear-gradient(145deg, #1c2138, #121624);
+            text-shadow: 0 0 12px #00ffff88, 0 2px 0 #000;
+            border: 1px solid #00ffff44;
+            font-family: 'Courier New', monospace;
+        }
+        .ctrl-btn:active {
+            transform: translateY(5px);
+            box-shadow: 0 1px 0 #0a0c16, 0 6px 16px rgba(0, 0, 0, 0.9);
+            background: #0e1120;
+        }
+        .ctrl-btn.up { width: 68px; height: 68px; font-size: 30px; }
+        .ctrl-btn.down { width: 68px; height: 68px; font-size: 30px; }
+        .ctrl-btn.left { width: 68px; height: 68px; font-size: 30px; }
+        .ctrl-btn.right { width: 68px; height: 68px; font-size: 30px; }
+
+        .ctrl-btn:active {
+            color: #aaffff;
+            border-color: #00ffffaa;
+            box-shadow: 0 0 24px #00ffff66, 0 1px 0 #0a0c16;
+        }
+
+        @media (pointer: coarse) {
+            .mobile-controls {
+                display: flex;
+            }
+            .game-wrapper {
+                padding-bottom: 4px;
+            }
+        }
+        @media (max-width: 480px) {
+            .ctrl-btn {
+                width: 58px;
+                height: 58px;
+                font-size: 24px;
+            }
+            .ctrl-btn.up, .ctrl-btn.down, .ctrl-btn.left, .ctrl-btn.right {
+                width: 58px;
+                height: 58px;
+                font-size: 24px;
+            }
+        }
+        .status-tip {
+            color: #4a5a7a;
+            text-align: center;
+            padding: 10px 0 2px 0;
+            font-size: 13px;
+            letter-spacing: 2px;
+            font-weight: 400;
+            opacity: 0.7;
+            text-transform: uppercase;
+            font-family: 'Courier New', monospace;
+            text-shadow: 0 0 8px #00ffff22;
+        }
+        .status-tip span {
+            color: #00e5ff;
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+<div class="game-wrapper">
+    <canvas id="gameCanvas" width="400" height="400"></canvas>
+    <div class="mobile-controls">
+        <div class="ctrl-group">
+            <button class="ctrl-btn up" id="upBtn" aria-label="вверх">▲</button>
+            <button class="ctrl-btn down" id="downBtn" aria-label="вниз">▼</button>
+        </div>
+        <div class="ctrl-group">
+            <button class="ctrl-btn left" id="leftBtn" aria-label="влево">◀</button>
+            <button class="ctrl-btn right" id="rightBtn" aria-label="вправо">▶</button>
+        </div>
+    </div>
+    <div class="status-tip">⚡ <span>КИБЕРЗМЕЙ</span> · стрелки / сенсор ⚡</div>
+</div>
+<script>
+    (function() {
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+
+        // ---------- КОНФИГ ----------
+        const SIZE = 20;          // размер ячейки
+        const GRID = 20;          // 20x20
+        const W = 400, H = 400;
+
+        // ---------- СОСТОЯНИЕ ----------
+        let snake = [
+            { x: 10, y: 10 },
+            { x: 9, y: 10 },
+            { x: 8, y: 10 },
+        ];
+        let direction = 'right';
+        let nextDirection = 'right';
+        let food = { x: 15, y: 10 };
+        let score = 0;
+        let gameOver = false;
+        let winFlag = false;      // победа, если змейка заполнила поле
+        let frameCounter = 0;
+        const MOVE_INTERVAL = 7;  // кадров на шаг (скорость)
+
+        // Для эффектов
+        let particles = [];
+
+        // ---------- ФУНКЦИИ ----------
+        function randomInt(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+
+        // генерация еды (не на змейке)
+        function spawnFood() {
+            const totalCells = GRID * GRID;
+            if (snake.length >= totalCells) {
+                winFlag = true;
+                gameOver = true;
+                return;
+            }
+            const snakeSet = new Set(snake.map(s => `${s.x},${s.y}`));
+            const free = [];
+            for (let i = 0; i < GRID; i++) {
+                for (let j = 0; j < GRID; j++) {
+                    if (!snakeSet.has(`${i},${j}`)) free.push({ x: i, y: j });
+                }
+            }
+            if (free.length === 0) {
+                winFlag = true;
+                gameOver = true;
+                return;
+            }
+            const idx = Math.floor(Math.random() * free.length);
+            food = free[idx];
+        }
+
+        // сброс игры
+        function resetGame() {
+            snake = [
+                { x: 10, y: 10 },
+                { x: 9, y: 10 },
+                { x: 8, y: 10 },
+            ];
+            direction = 'right';
+            nextDirection = 'right';
+            score = 0;
+            gameOver = false;
+            winFlag = false;
+            particles = [];
+            spawnFood();
+        }
+
+        // обработка движения
+        function moveSnake() {
+            if (gameOver) return;
+
+            // применяем направление
+            direction = nextDirection;
+
+            const head = snake[0];
+            let newHead = { ...head };
+            switch (direction) {
+                case 'right': newHead.x++; break;
+                case 'left':  newHead.x--; break;
+                case 'up':    newHead.y--; break;
+                case 'down':  newHead.y++; break;
+                default: return;
+            }
+
+            // проверка выхода за границы
+            if (newHead.x < 0 || newHead.x >= GRID || newHead.y < 0 || newHead.y >= GRID) {
+                gameOver = true;
+                return;
+            }
+
+            // проверка на еду
+            const isEating = (newHead.x === food.x && newHead.y === food.y);
+
+            // строим новую змейку
+            let newSnake = [newHead, ...snake];
+            if (!isEating) {
+                newSnake.pop(); // убираем хвост
+            }
+
+            // проверка столкновения с собой (кроме головы)
+            const headStr = `${newHead.x},${newHead.y}`;
+            const bodyWithoutHead = newSnake.slice(1).map(s => `${s.x},${s.y}`);
+            if (bodyWithoutHead.includes(headStr)) {
+                gameOver = true;
+                return;
+            }
+
+            snake = newSnake;
+
+            if (isEating) {
+                score++;
+                spawnFood();
+                // частицы для эффекта
+                for (let i = 0; i < 18; i++) {
+                    particles.push({
+                        x: food.x * SIZE + SIZE/2,
+                        y: food.y * SIZE + SIZE/2,
+                        vx: (Math.random() - 0.5) * 8,
+                        vy: (Math.random() - 0.5) * 8,
+                        life: 1.0,
+                        color: `hsl(${160 + Math.random() * 40}, 100%, 60%)`,
+                        size: 4 + Math.random() * 6,
+                    });
+                }
+            }
+        }
+
+        // обновление частиц
+        function updateParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.1;
+                p.life -= 0.025;
+                p.size *= 0.98;
+                if (p.life <= 0 || p.size < 0.3) {
+                    particles.splice(i, 1);
+                }
+            }
+        }
+
+        // ---------- ОТРИСОВКА (КИБЕРПАНК) ----------
+        function draw() {
+            ctx.clearRect(0, 0, W, H);
+
+            // ---- ФОН с сеткой ----
+            const grad = ctx.createRadialGradient(200, 200, 20, 200, 200, 300);
+            grad.addColorStop(0, '#141a2b');
+            grad.addColorStop(0.7, '#0a0d18');
+            grad.addColorStop(1, '#05070e');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, W, H);
+
+            // неоновая сетка
+            ctx.strokeStyle = '#00ffff08';
+            ctx.lineWidth = 0.5;
+            for (let i = 0; i <= GRID; i++) {
+                ctx.beginPath();
+                ctx.moveTo(i * SIZE, 0);
+                ctx.lineTo(i * SIZE, H);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(0, i * SIZE);
+                ctx.lineTo(W, i * SIZE);
+                ctx.stroke();
+            }
+
+            // ---- ЕДА (неоновая) ----
+            const fx = food.x * SIZE + SIZE/2;
+            const fy = food.y * SIZE + SIZE/2;
+            // свечение
+            ctx.shadowColor = '#00ffcc';
+            ctx.shadowBlur = 32;
+            ctx.beginPath();
+            ctx.arc(fx, fy, 9, 0, Math.PI * 2);
+            ctx.fillStyle = '#00ffcc';
+            ctx.fill();
+            ctx.shadowBlur = 16;
+            ctx.fillStyle = '#88ffee';
+            ctx.beginPath();
+            ctx.arc(fx-2, fy-3, 4, 0, Math.PI*2);
+            ctx.fill();
+            ctx.fillStyle = '#00ccaa';
+            ctx.shadowBlur = 8;
+            ctx.beginPath();
+            ctx.arc(fx+3, fy+2, 2.5, 0, Math.PI*2);
+            ctx.fill();
+            // внешний контур
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = '#00ffee88';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(fx, fy, 9, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // ---- ЗМЕЙКА (кибер-стиль) ----
+            for (let i = 0; i < snake.length; i++) {
+                const seg = snake[i];
+                const x = seg.x * SIZE;
+                const y = seg.y * SIZE;
+                const isHead = (i === 0);
+                const pad = 1.5;
+                const radius = 5;
+
+                // градиент для сегмента
+                const hue = 190 + i * 0.8;
+                const light = isHead ? 70 : 55;
+                const color1 = `hsl(${hue}, 90%, ${light}%)`;
+                const color2 = `hsl(${hue + 20}, 85%, ${light - 25}%)`;
+
+                // тень
+                ctx.shadowColor = `hsl(${hue}, 100%, 60%, 0.5)`;
+                ctx.shadowBlur = isHead ? 30 : 18;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
+
+                const gradSeg = ctx.createLinearGradient(x, y, x + SIZE, y + SIZE);
+                gradSeg.addColorStop(0, color1);
+                gradSeg.addColorStop(0.6, color2);
+                gradSeg.addColorStop(1, `hsl(${hue + 30}, 80%, 20%)`);
+                ctx.fillStyle = gradSeg;
+                ctx.beginPath();
+                ctx.roundRect(x + pad, y + pad, SIZE - pad*2, SIZE - pad*2, radius);
+                ctx.fill();
+
+                // обводка
+                ctx.shadowBlur = 4;
+                ctx.strokeStyle = `hsl(${hue}, 100%, 70%, 0.6)`;
+                ctx.lineWidth = 1.2;
+                ctx.beginPath();
+                ctx.roundRect(x + pad, y + pad, SIZE - pad*2, SIZE - pad*2, radius);
+                ctx.stroke();
+
+                // глазки у головы
+                if (isHead) {
+                    ctx.shadowBlur = 0;
+                    ctx.fillStyle = '#f0faff';
+                    ctx.shadowColor = '#00ffff';
+                    ctx.shadowBlur = 14;
+                    let ex1, ey1, ex2, ey2;
+                    switch (direction) {
+                        case 'right': ex1 = x+13, ey1 = y+5; ex2 = x+13, ey2 = y+13; break;
+                        case 'left':  ex1 = x+5, ey1 = y+5; ex2 = x+5, ey2 = y+13; break;
+                        case 'up':    ex1 = x+5, ey1 = y+5; ex2 = x+13, ey2 = y+5; break;
+                        case 'down':  ex1 = x+5, ey1 = y+13; ex2 = x+13, ey2 = y+13; break;
+                        default: ex1 = x+13, ey1 = y+5; ex2 = x+13, ey2 = y+13;
+                    }
+                    ctx.beginPath();
+                    ctx.arc(ex1, ey1, 3.5, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(ex2, ey2, 3.5, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.fillStyle = '#0a0e1a';
+                    ctx.shadowBlur = 0;
+                    ctx.beginPath();
+                    ctx.arc(ex1+1, ey1-0.5, 1.8, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(ex2+1, ey2-0.5, 1.8, 0, Math.PI*2);
+                    ctx.fill();
+                }
+            }
+            ctx.shadowBlur = 0;
+
+            // ---- ЧАСТИЦЫ ----
+            for (let p of particles) {
+                ctx.globalAlpha = p.life;
+                ctx.shadowColor = '#00ffcc';
+                ctx.shadowBlur = 20;
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+            ctx.shadowBlur = 0;
+
+            // ---- СЧЁТ (неон) ----
+            ctx.font = 'bold 24px "Courier New", monospace';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            ctx.shadowColor = '#00ffff88';
+            ctx.shadowBlur = 20;
+            ctx.fillStyle = '#00f0ff';
+            ctx.fillText('⚡ ' + score, 14, 12);
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#00ffff33';
+            ctx.fillText('⚡ ' + score, 16, 14);
+
+            // ---- GAME OVER / WIN ----
+            if (gameOver) {
+                ctx.shadowBlur = 30;
+                ctx.shadowColor = '#ff0066';
+                ctx.font = 'bold 32px "Courier New", monospace';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const msg = winFlag ? 'ПОБЕДА' : 'GAME OVER';
+                const color = winFlag ? '#00ffaa' : '#ff3366';
+                ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                ctx.beginPath();
+                ctx.roundRect(80, 160, 240, 70, 20);
+                ctx.fill();
+                ctx.shadowColor = winFlag ? '#00ffaa88' : '#ff336688';
+                ctx.fillStyle = color;
+                ctx.fillText(msg, 200, 200);
+                ctx.shadowBlur = 0;
+                ctx.font = '16px "Courier New", monospace';
+                ctx.fillStyle = '#aab5dd';
+                ctx.fillText('нажми любую кнопку', 200, 248);
+            }
+
+            ctx.shadowBlur = 0;
+        }
+
+        // ---------- ДОП. МЕТОДЫ ----------
+        CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+            if (r > w/2) r = w/2;
+            if (r > h/2) r = h/2;
+            this.moveTo(x + r, y);
+            this.lineTo(x + w - r, y);
+            this.quadraticCurveTo(x + w, y, x + w, y + r);
+            this.lineTo(x + w, y + h - r);
+            this.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+            this.lineTo(x + r, y + h);
+            this.quadraticCurveTo(x, y + h, x, y + h - r);
+            this.lineTo(x, y + r);
+            this.quadraticCurveTo(x, y, x + r, y);
+            this.closePath();
+            return this;
+        };
+
+        // ---------- УПРАВЛЕНИЕ ----------
+        function setDirection(newDir) {
+            if (gameOver) {
+                resetGame();
+                return;
+            }
+            const opposites = { up: 'down', down: 'up', left: 'right', right: 'left' };
+            if (newDir !== opposites[direction]) {
+                nextDirection = newDir;
+            }
+        }
+
+        // клавиатура
+        window.addEventListener('keydown', (e) => {
+            const key = e.key;
+            e.preventDefault();
+            if (gameOver) { resetGame(); return; }
+            switch (key) {
+                case 'ArrowUp': setDirection('up'); break;
+                case 'ArrowDown': setDirection('down'); break;
+                case 'ArrowLeft': setDirection('left'); break;
+                case 'ArrowRight': setDirection('right'); break;
+                default: return;
+            }
+        });
+
+        // сенсорные кнопки
+        function setupMobileButton(id, dir) {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+            btn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                if (gameOver) { resetGame(); return; }
+                setDirection(dir);
+            }, { passive: false });
+            btn.addEventListener('mousedown', (e) => {
+                if (gameOver) { resetGame(); return; }
+                setDirection(dir);
+            });
+        }
+        setupMobileButton('upBtn', 'up');
+        setupMobileButton('downBtn', 'down');
+        setupMobileButton('leftBtn', 'left');
+        setupMobileButton('rightBtn', 'right');
+
+        // ---------- ИГРОВОЙ ЦИКЛ ----------
+        function gameLoop() {
+            frameCounter++;
+            if (!gameOver && frameCounter % MOVE_INTERVAL === 0) {
+                moveSnake();
+                if (!gameOver) updateParticles();
+            } else {
+                updateParticles();
+            }
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // ---------- СТАРТ ----------
+        resetGame();
+        spawnFood();
+        gameLoop();
+
+        // блокировка контекстного меню
+        canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    })();
+</script>
+</body>
+</html>
